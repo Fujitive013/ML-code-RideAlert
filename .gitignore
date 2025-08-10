@@ -1,0 +1,42 @@
+# Ignore CSV files (datasets and outputs)
+*.csv
+
+# Ignore pickle files (trained models and serialized objects)
+*.pkl
+
+# Ignore large data directories
+smartphone-decimeter-2023/
+
+# Ignore generated outputs
+*.png
+*.html
+*.json
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Virtual environment
+venv/
+env/
+.env
+
+# IDE files
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Large test outputs
+test_predictions_and_routes/
