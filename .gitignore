@@ -4,6 +4,8 @@
 # Ignore pickle files (trained models and serialized objects)
 *.pkl
 
+/data results
+/pickle files
 # Ignore large data directories
 smartphone-decimeter-2023/
 
