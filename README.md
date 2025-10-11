@@ -1,22 +1,53 @@
-# RideAlert: Enhanced GPS Correction ML Pipeline
+# RideAlert: Enhanced GPS Correction ML Pipeline (v6)
 
-A machine learning pipeline for high-precision GPS correction using smartphone GNSS and IMU sensor data, targeting sub-10 meter accuracy for location-based applications.
+This project implements a machine learning pipeline for high-precision GPS correction using smartphone GNSS and IMU sensor data, targeting sub-10 meter accuracy for location-based applications. The latest version (v6) introduces advanced feature engineering, strict domain filtering (SpeedMps ≤ 15), and robust ensemble modeling.
 
 ## 🎯 Project Overview
 
 This project implements an advanced GPS correction system that uses machine learning to improve smartphone GPS accuracy from typical 5-20 meter precision to sub-10 meter accuracy. The system combines GNSS (Global Navigation Satellite System) signal data with IMU (Inertial Measurement Unit) sensor readings to predict and apply intelligent corrections to raw GPS coordinates.
 
-### Key Features
+-   **Offset-Based Correction**: The model predicts latitude and longitude correction offsets (`LatCorrection`, `LngCorrection`). These offsets are added to the raw Weighted Least Squares (WLS) coordinates to produce corrected GPS positions:
 
--   **Enhanced Signal Quality Filtering**: Filters for strong GNSS signals (Cn0DbHz > 40) and high satellite elevation (> 20°)
+    -   `corrected_lat = wls_lat + predicted_lat_correction`
+    -   `corrected_lng = wls_lng + predicted_lng_correction`
+
+    **Offset Calculation:**
+
+    -   For each sample, the offset is calculated as the difference between the ground truth position and the WLS-estimated position:
+        -   `LatCorrection = LatitudeDegrees_gt - WlsLat`
+        -   `LngCorrection = LongitudeDegrees_gt - WlsLng`
+    -   The model is trained to predict these offsets using both raw and derived features.
+
+    **Academic Notes:**
+
+    -   This approach allows the model to learn systematic errors in the WLS solution and correct them based on sensor and satellite context.
+    -   The offset-based method is robust to domain shifts and can generalize corrections for different environments.
+
+-   **Derived Features Usage**:
+
+    -   **SignalQuality:** Defined as `Cn0DbHz * sin(SvElevationDegrees)`; captures the effective satellite signal strength considering elevation. Used as a feature to help the model distinguish high-quality satellite measurements.
+    -   **WLS_Distance:** Calculated as the Euclidean norm of the ECEF coordinates: `sqrt(X^2 + Y^2 + Z^2)`. Used to provide spatial context and detect outliers in position estimates.
+    -   Both derived features are included in the model input and shown to improve correction accuracy, especially in noisy or low-quality signal scenarios.
+
+-   **Academic Paper Notes:**
+    -   Clearly state the offset-based correction approach and its advantages.
+    -   Explain the use and impact of derived features (SignalQuality, WLS_Distance) in improving model robustness.
+    -   Emphasize domain filtering (SpeedMps ≤ 15) for deployment relevance.
+    -   Discuss how the model learns to correct systematic WLS errors using sensor and satellite context.
+    -   Note: All categorical features are label-encoded; missing values are filled with defaults for robustness.
+-   **Offset-Based Correction**: The model predicts latitude and longitude correction offsets (`LatCorrection`, `LngCorrection`). These offsets are added to the raw Weighted Least Squares (WLS) coordinates to produce corrected GPS positions:
+    -   `corrected_lat = wls_lat + predicted_lat_correction`
+    -   `corrected_lng = wls_lng + predicted_lng_correction`
+-   **Speed Domain Filtering**: Training data is filtered to SpeedMps ≤ 15 m/s (Philippine city bus domain)
+-   **Enhanced Signal Quality Filtering**: Strong GNSS signals (Cn0DbHz > 40), high satellite elevation (> 20°)
 -   **Multi-Sensor Fusion**: Combines GNSS satellite data with smartphone IMU measurements
--   **Ensemble Machine Learning**: Uses Gradient Boosting + Random Forest ensemble for robust predictions
--   **Real-time Applicability**: Designed for deployment in mobile applications
+-   **Advanced Feature Engineering**: Derived features (SignalQuality, WLS_Distance) and categorical encodings
+-   **Ensemble Machine Learning**: Gradient Boosting (primary) and Random Forest (optional)
 -   **Sub-10m Accuracy Target**: Achieves mean correction accuracy under 10 meters
 
 ## 📊 Dataset
 
-The project uses the **Smartphone Decimeter Challenge 2023** dataset, which includes:
+Uses the **Smartphone Decimeter Challenge 2023** dataset:
 
 -   **GNSS Data**: Satellite signal measurements, positions, signal strength
 -   **IMU Data**: Accelerometer, gyroscope, and magnetometer readings
@@ -41,7 +72,7 @@ smartphone-decimeter-2023/sdc2023/
 
 **GNSS Features:**
 
--   `Cn0DbHz` - Signal strength (Signal-to-Noise Ratio)
+-   `Cn0DbHz` - Signal strength (SNR)
 -   `SvElevationDegrees` - Satellite elevation angle
 -   `SvAzimuthDegrees` - Satellite azimuth angle
 -   `Svid` - Satellite ID
@@ -49,9 +80,10 @@ smartphone-decimeter-2023/sdc2023/
 
 **IMU Features:**
 
--   `MeasurementX/Y/Z` - Raw sensor measurements (acceleration, angular velocity)
--   `BiasX/Y/Z` - Sensor bias corrections
 -   `IMU_MessageType` - Sensor type (UncalAccel, UncalGyro, UncalMag)
+-   `MeasurementX/Y/Z` - Raw sensor measurements
+-   `BiasX/Y/Z` - Sensor bias corrections
+-   `SpeedMps` - Speed in meters per second (used for domain filtering)
 
 **Derived Features:**
 
@@ -60,25 +92,28 @@ smartphone-decimeter-2023/sdc2023/
 
 ### Machine Learning Models
 
-**Ensemble Architecture:**
+**Single Model (v6):**
 
--   **Gradient Boosting Regressor**: Primary model for pattern learning
--   **Random Forest Regressor**: Secondary model for ensemble diversity
--   **Weighted Ensemble**: 60% Gradient Boosting + 40% Random Forest
+-   Gradient Boosting Regressor (primary)
+-   RobustScaler for feature scaling
+
+**Optional Ensemble:**
+
+-   Random Forest Regressor (secondary)
+-   Weighted averaging (60% GB, 40% RF)
 
 **Model Configuration:**
 
 ```python
 # Gradient Boosting
 n_estimators=200, max_depth=8, learning_rate=0.05
-
 # Random Forest
 n_estimators=200, max_depth=20, min_samples_split=30
 ```
 
 ### Target Prediction
 
-The models predict **correction offsets** (LatCorrection, LngCorrection) that are added to the raw WLS coordinates:
+Models predict **correction offsets** (LatCorrection, LngCorrection) added to raw WLS coordinates:
 
 ```
 corrected_lat = wls_lat + predicted_lat_correction
@@ -106,27 +141,27 @@ corrected_lng = wls_lng + predicted_lng_correction
 ### Training the Model
 
 1. **Data Preparation**: Load and merge GNSS, IMU, and ground truth data
-2. **Feature Engineering**: Create derived features and apply quality filtering
-3. **Model Training**: Train Gradient Boosting and Random Forest models
-4. **Ensemble Creation**: Combine models with weighted averaging
+2. **Feature Engineering**: Create derived features, label encode categorical columns
+3. **Domain Filtering**: Filter training data to SpeedMps ≤ 15 m/s (city bus domain)
+4. **Quality Filtering**: Apply GNSS signal and satellite elevation filters
+5. **Model Training**: Train Gradient Boosting model (optionally ensemble with Random Forest)
 
 ### Making Predictions
 
 ```python
-# Load trained models
+# Load trained model and scaler
 gb_model = joblib.load('gradient_boosting_model_v6.pkl')
-rf_model = joblib.load('random_forest_model_v6.pkl')
 scaler = joblib.load('robust_scaler_v6.pkl')
+features = joblib.load('enhanced_features_v6.pkl')
+encoders = joblib.load('enhanced_label_encoders_v6.pkl')
 
 # Prepare features and predict corrections
 X_scaled = scaler.transform(features)
 gb_corrections = gb_model.predict(X_scaled)
-rf_corrections = rf_model.predict(X_scaled)
-ensemble_corrections = 0.6 * gb_corrections + 0.4 * rf_corrections
 
 # Apply corrections
-corrected_lat = raw_lat + ensemble_corrections[:, 0]
-corrected_lng = raw_lng + ensemble_corrections[:, 1]
+corrected_lat = raw_lat + gb_corrections[:, 0]
+corrected_lng = raw_lng + gb_corrections[:, 1]
 ```
 
 ## 📈 Performance Results
@@ -167,13 +202,13 @@ pyproj>=3.2.0
 
 ## 🔄 Model Versions
 
--   **v6 (Current)**: Enhanced ensemble with improved signal quality filtering
+-   **v6 (Current)**: Single Gradient Boosting model, strict SpeedMps filtering, enhanced feature engineering
 -   **v5**: Random Forest with feature selection
 -   **v4**: Basic Gradient Boosting implementation
 
 ## 📊 Visualization Features
 
-The pipeline includes comprehensive visualization tools:
+Pipeline includes:
 
 -   **Interactive Maps**: Folium-based route comparison (raw vs corrected)
 -   **Performance Charts**: Correction distance distributions and accuracy metrics
@@ -183,6 +218,7 @@ The pipeline includes comprehensive visualization tools:
 
 ### Target Use Cases
 
+-   **Public Transport/Bus Tracking**: Optimized for city bus domain (SpeedMps ≤ 15)
 -   **Autonomous Vehicles**: Enhanced positioning for self-driving cars
 -   **Delivery Services**: Precise location for package delivery
 -   **Emergency Services**: Accurate location for first responders
@@ -200,10 +236,11 @@ The pipeline includes comprehensive visualization tools:
 
 This project demonstrates:
 
-1. **Multi-sensor Fusion**: Effective combination of GNSS and IMU data
-2. **Quality-based Filtering**: Signal strength and elevation filtering for accuracy
-3. **Ensemble Learning**: Improved robustness through model combination
-4. **Real-world Applicability**: Practical deployment considerations
+1. **Domain Filtering**: Strict SpeedMps filtering for deployment relevance
+2. **Multi-sensor Fusion**: Effective combination of GNSS and IMU data
+3. **Quality-based Filtering**: Signal strength and elevation filtering for accuracy
+4. **Ensemble Learning**: Improved robustness through model combination
+5. **Real-world Applicability**: Practical deployment considerations
 
 ## 📝 License
 
