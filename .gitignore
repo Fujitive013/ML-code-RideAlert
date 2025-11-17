@@ -3,6 +3,7 @@
 
 # Ignore pickle files (trained models and serialized objects)
 *.pkl
+*.7z
 
 /data results
 /pickle files
